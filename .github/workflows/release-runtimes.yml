@@ -45,6 +45,10 @@ jobs:
         env:
           PHP_VERSION: ${{ inputs.php_version }}
           ARCH: ${{ matrix.arch }}
+          # static-php-cli resolves dependency download URLs via the GitHub API;
+          # anonymous calls from CI runners get rate-limited (the zlib download
+          # failure). Authenticate with the workflow token to lift the limit.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           bash scripts/build-php-runtime.sh
 
