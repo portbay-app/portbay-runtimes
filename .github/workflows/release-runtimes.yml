@@ -111,7 +111,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          tauri signer sign dist/manifest.json > dist/manifest.json.sig
+          # `tauri signer sign` prints a human banner to stdout AND emits the
+          # detached signature on the line after "Public signature:". Capture
+          # THAT line into a var (it also writes its own .sig, so don't redirect
+          # stdout straight onto that path — the old bug captured the banner text
+          # instead of the signature, and verification failed).
+          sig="$(tauri signer sign dist/manifest.json | awk '/Public signature:/{getline; print; exit}')"
+          printf '%s' "$sig" > dist/manifest.json.sig
+          # Fail fast if the captured signature isn't a valid base64 minisign blob.
+          base64 -d < dist/manifest.json.sig | head -1 | grep -q 'untrusted comment'
 
       - name: Publish GitHub release
         env:
