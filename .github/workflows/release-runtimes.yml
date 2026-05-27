@@ -1,0 +1,117 @@
+name: release-runtimes
+
+on:
+  workflow_dispatch:
+    inputs:
+      php_version:
+        description: "PHP version to build"
+        required: true
+        default: "8.4.21"
+      release_tag:
+        description: "Release tag"
+        required: true
+        default: "php-8.4.21"
+
+permissions:
+  contents: write
+
+jobs:
+  build-php:
+    name: build php ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+          - arch: x86_64
+            runner: macos-13
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build prerequisites
+        run: |
+          brew update
+          brew install autoconf automake bison re2c pkg-config zstd
+
+      - name: Install PHP build driver
+        run: |
+          brew install php
+
+      - name: Build PHP runtime
+        env:
+          PHP_VERSION: ${{ inputs.php_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          bash scripts/build-php-runtime.sh
+
+      - name: Developer ID sign runtime executables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          bash scripts/sign-notarize-runtime.sh "dist/php/${{ inputs.php_version }}"
+
+      - name: Repack after signing
+        env:
+          PHP_VERSION: ${{ inputs.php_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          archive="dist/php-fpm-${PHP_VERSION}-${ARCH}.tar.zst"
+          tar -C "dist/php/${PHP_VERSION}" --zstd -cf "$archive" .
+          shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
+          wc -c < "$archive" | tr -d ' ' > "$archive.size"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-${{ inputs.php_version }}-${{ matrix.arch }}
+          path: |
+            dist/php-fpm-${{ inputs.php_version }}-${{ matrix.arch }}.tar.zst
+            dist/php-fpm-${{ inputs.php_version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/php-fpm-${{ inputs.php_version }}-${{ matrix.arch }}.tar.zst.size
+
+  publish:
+    name: publish manifest + release
+    needs: build-php
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist
+          find artifacts -type f -name 'php-fpm-*' -exec cp {} dist/ \;
+          ls -lah dist
+
+      - name: Generate manifest
+        run: |
+          node scripts/generate-manifest.mjs \
+            dist \
+            "https://github.com/portbay-app/portbay-runtimes/releases/download/${{ inputs.release_tag }}"
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
+
+      - name: Sign manifest
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          tauri signer sign dist/manifest.json > dist/manifest.json.sig
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ inputs.release_tag }}" \
+            --title "PortBay runtimes ${{ inputs.release_tag }}" \
+            --notes "PortBay managed PHP runtime ${{ inputs.php_version }}." \
+            dist/*
+

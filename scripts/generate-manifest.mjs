@@ -1,0 +1,43 @@
+#!/usr/bin/env node
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const dist = process.argv[2] ?? "dist";
+const baseUrl = process.argv[3];
+if (!baseUrl) {
+  console.error("usage: generate-manifest.mjs <dist> <base-url>");
+  process.exit(2);
+}
+
+const entries = [];
+for (const name of readdirSync(dist)) {
+  const match = /^php-fpm-(.+)-(aarch64|x86_64)\.tar\.zst$/.exec(name);
+  if (!match) continue;
+  const [, version, arch] = match;
+  const archive = join(dist, name);
+  entries.push({
+    lang: "php",
+    version,
+    arch,
+    url: `${baseUrl}/${name}`,
+    sha256: readFileSync(`${archive}.sha256`, "utf8").trim(),
+    size: statSync(archive).size,
+    compression: "zstd",
+  });
+}
+
+entries.sort((a, b) =>
+  a.lang.localeCompare(b.lang) ||
+  a.version.localeCompare(b.version) ||
+  a.arch.localeCompare(b.arch)
+);
+
+writeFileSync(
+  join(dist, "manifest.json"),
+  `${JSON.stringify({
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    entries,
+  }, null, 2)}\n`
+);
+
