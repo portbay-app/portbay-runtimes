@@ -23,6 +23,7 @@ mkdir -p "$WORK" "$PKG/bin" "$PKG/sbin" "$PKG/etc" "$PKG/lib" "$PKG/extensions" 
 
 git clone --depth 1 https://github.com/crazywhalecc/static-php-cli.git "$SPC"
 cd "$SPC"
+composer install --no-dev --no-interaction --prefer-dist
 
 php bin/spc doctor || true
 php bin/spc build:php "$EXTENSIONS" \

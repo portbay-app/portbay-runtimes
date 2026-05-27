@@ -39,6 +39,7 @@ jobs:
       - name: Install PHP build driver
         run: |
           brew install php
+          brew install composer
 
       - name: Build PHP runtime
         env:
@@ -114,4 +115,3 @@ jobs:
             --title "PortBay runtimes ${{ inputs.release_tag }}" \
             --notes "PortBay managed PHP runtime ${{ inputs.php_version }}." \
             dist/*
-
