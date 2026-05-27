@@ -12,6 +12,9 @@ case "$ARCH" in
 esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The build `cd`s into static-php-cli, so OUT_DIR/PKG must be absolute — a
+# relative "dist" would resolve under $SPC at the packaging cp and not exist.
+case "$OUT_DIR" in /*) ;; *) OUT_DIR="$ROOT/$OUT_DIR" ;; esac
 WORK="$ROOT/.work/php-$PHP_VERSION-$MANIFEST_ARCH"
 SPC="$WORK/static-php-cli"
 BUILD="$WORK/buildroot"
