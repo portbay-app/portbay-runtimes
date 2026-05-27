@@ -25,11 +25,16 @@ git clone --depth 1 https://github.com/crazywhalecc/static-php-cli.git "$SPC"
 cd "$SPC"
 composer install --no-dev --no-interaction --prefer-dist
 
-php bin/spc doctor || true
+if ! command -v pkg-config >/dev/null 2>&1 && command -v pkgconf >/dev/null 2>&1; then
+  mkdir -p "$WORK/bin"
+  ln -sf "$(command -v pkgconf)" "$WORK/bin/pkg-config"
+  export PATH="$WORK/bin:$PATH"
+fi
+
+php bin/spc doctor --auto-fix=never || true
 php bin/spc build:php "$EXTENSIONS" \
   --build-cli \
   --build-fpm \
-  --debug=no \
   --dl-with-php="$PHP_VERSION" \
   --dl-prefer-binary \
   --dl-parallel="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
