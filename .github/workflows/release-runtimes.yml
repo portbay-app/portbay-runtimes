@@ -25,8 +25,10 @@ jobs:
         include:
           - arch: aarch64
             runner: macos-14
-          - arch: x86_64
-            runner: macos-13
+          # x86_64 intentionally omitted: the PortBay app ships arm64-only
+          # (PortBay_*_aarch64.dmg), so an Intel runtime isn't needed, and
+          # GitHub's macos-13 Intel runners queue indefinitely. Re-add a
+          # `{ arch: x86_64, runner: <intel-runner> }` entry if Intel is ever shipped.
 
     steps:
       - uses: actions/checkout@v4
