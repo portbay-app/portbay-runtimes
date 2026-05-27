@@ -16,7 +16,7 @@ WORK="$ROOT/.work/php-$PHP_VERSION-$MANIFEST_ARCH"
 SPC="$WORK/static-php-cli"
 BUILD="$WORK/buildroot"
 PKG="$OUT_DIR/php/$PHP_VERSION"
-EXTENSIONS="${PHP_EXTENSIONS:-bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib}"
+EXTENSIONS="${PHP_EXTENSIONS:-bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib}"
 
 rm -rf "$WORK" "$PKG"
 mkdir -p "$WORK" "$PKG/bin" "$PKG/sbin" "$PKG/etc" "$PKG/lib" "$PKG/extensions" "$OUT_DIR"
@@ -25,9 +25,13 @@ git clone --depth 1 https://github.com/crazywhalecc/static-php-cli.git "$SPC"
 cd "$SPC"
 composer install --no-dev --no-interaction --prefer-dist
 
-if ! command -v pkg-config >/dev/null 2>&1 && command -v pkgconf >/dev/null 2>&1; then
+if ! command -v pkg-config >/dev/null 2>&1; then
   mkdir -p "$WORK/bin"
-  ln -sf "$(command -v pkgconf)" "$WORK/bin/pkg-config"
+  if command -v pkgconf >/dev/null 2>&1; then
+    ln -sf "$(command -v pkgconf)" "$WORK/bin/pkg-config"
+  elif [[ -x "$(brew --prefix pkgconf 2>/dev/null)/bin/pkgconf" ]]; then
+    ln -sf "$(brew --prefix pkgconf)/bin/pkgconf" "$WORK/bin/pkg-config"
+  fi
   export PATH="$WORK/bin:$PATH"
 fi
 

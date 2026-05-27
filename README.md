@@ -25,7 +25,7 @@ arch-specific `.tar.zst` archive listed for the requested runtime.
 The first PHP runtime is intentionally broad enough for Laravel, WordPress, and
 common PHP apps without shipping every PECL module:
 
-`bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib`
+`bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib`
 
 ## Release
 
@@ -42,4 +42,3 @@ Required repository secrets:
 - `APPLE_API_ISSUER`
 - `APPLE_API_KEY`
 - `APPLE_API_KEY_P8`
-
