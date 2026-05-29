@@ -11,12 +11,20 @@ if (!baseUrl) {
 
 const entries = [];
 for (const name of readdirSync(dist)) {
-  const match = /^php-fpm-(.+)-(aarch64|x86_64)\.tar\.zst$/.exec(name);
+  // Archive prefix → the manifest `lang` the app filters on:
+  //   php-fpm-*  → "php"  (the PHP build ships php + php-fpm)
+  //   <engine>-* → "<engine>" for database engines, matching DatabaseEngine::id()
+  //                ("mysql"/"mariadb"/"postgres"/"redis"/"mongo"/"memcached")
+  const match =
+    /^(php-fpm|mysql|mariadb|postgres|redis|mongo|memcached)-(.+)-(aarch64|x86_64)\.tar\.zst$/.exec(
+      name,
+    );
   if (!match) continue;
-  const [, version, arch] = match;
+  const [, prefix, version, arch] = match;
+  const lang = prefix === "php-fpm" ? "php" : prefix;
   const archive = join(dist, name);
   entries.push({
-    lang: "php",
+    lang,
     version,
     arch,
     url: `${baseUrl}/${name}`,

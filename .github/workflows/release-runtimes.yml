@@ -7,10 +7,34 @@ on:
         description: "PHP version to build"
         required: true
         default: "8.4.21"
+      postgres_version:
+        description: "PostgreSQL version (source build; checksum auto-verified)"
+        required: true
+        default: "16.4"
+      redis_version:
+        description: "Redis version (source build)"
+        required: true
+        default: "7.4.1"
+      redis_sha256:
+        description: "SHA-256 of redis-<version>.tar.gz"
+        required: true
+        default: ""
+      mysql_version:
+        description: "MySQL version (official macOS tarball)"
+        required: true
+        default: "8.4.5"
+      mysql_macos_tag:
+        description: "macOS build tag in the MySQL tarball name (8.4.4/8.4.5 → macos15)"
+        required: true
+        default: "macos15"
+      mysql_sha256_aarch64:
+        description: "SHA-256 of the MySQL arm64 tarball"
+        required: true
+        default: ""
       release_tag:
         description: "Release tag"
         required: true
-        default: "php-8.4.21"
+        default: "runtimes-2026-05-29"
 
 permissions:
   contents: write
@@ -79,9 +103,138 @@ jobs:
             dist/php-fpm-${{ inputs.php_version }}-${{ matrix.arch }}.tar.zst.sha256
             dist/php-fpm-${{ inputs.php_version }}-${{ matrix.arch }}.tar.zst.size
 
+  # Database engines — arm64-only, matching build-php (the app ships arm64-only;
+  # Intel macos-13 runners queue indefinitely). Re-add an x86_64 matrix entry if
+  # an Intel build is ever shipped.
+  build-postgres:
+    name: build postgres ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: brew install zstd
+      - name: Build PostgreSQL runtime
+        env:
+          POSTGRES_VERSION: ${{ inputs.postgres_version }}
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/build-postgres-runtime.sh
+      - name: Developer ID sign runtime executables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign-notarize-runtime.sh "dist/postgres/${{ inputs.postgres_version }}"
+      - name: Repack after signing
+        env:
+          POSTGRES_VERSION: ${{ inputs.postgres_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          archive="dist/postgres-${POSTGRES_VERSION}-${ARCH}.tar.zst"
+          tar -C "dist/postgres/${POSTGRES_VERSION}" --zstd -cf "$archive" .
+          shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
+          wc -c < "$archive" | tr -d ' ' > "$archive.size"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-${{ inputs.postgres_version }}-${{ matrix.arch }}
+          path: |
+            dist/postgres-${{ inputs.postgres_version }}-${{ matrix.arch }}.tar.zst
+            dist/postgres-${{ inputs.postgres_version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/postgres-${{ inputs.postgres_version }}-${{ matrix.arch }}.tar.zst.size
+
+  build-redis:
+    name: build redis ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: brew install zstd
+      - name: Build Redis runtime
+        env:
+          REDIS_VERSION: ${{ inputs.redis_version }}
+          REDIS_SHA256: ${{ inputs.redis_sha256 }}
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/build-redis-runtime.sh
+      - name: Developer ID sign runtime executables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign-notarize-runtime.sh "dist/redis/${{ inputs.redis_version }}"
+      - name: Repack after signing
+        env:
+          REDIS_VERSION: ${{ inputs.redis_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          archive="dist/redis-${REDIS_VERSION}-${ARCH}.tar.zst"
+          tar -C "dist/redis/${REDIS_VERSION}" --zstd -cf "$archive" .
+          shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
+          wc -c < "$archive" | tr -d ' ' > "$archive.size"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: redis-${{ inputs.redis_version }}-${{ matrix.arch }}
+          path: |
+            dist/redis-${{ inputs.redis_version }}-${{ matrix.arch }}.tar.zst
+            dist/redis-${{ inputs.redis_version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/redis-${{ inputs.redis_version }}-${{ matrix.arch }}.tar.zst.size
+
+  build-mysql:
+    name: build mysql ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: brew install zstd
+      - name: Build MySQL runtime
+        env:
+          MYSQL_VERSION: ${{ inputs.mysql_version }}
+          MYSQL_MACOS_TAG: ${{ inputs.mysql_macos_tag }}
+          MYSQL_SHA256: ${{ inputs.mysql_sha256_aarch64 }}
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/build-mysql-runtime.sh
+      - name: Developer ID sign runtime executables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign-notarize-runtime.sh "dist/mysql/${{ inputs.mysql_version }}"
+      - name: Repack after signing
+        env:
+          MYSQL_VERSION: ${{ inputs.mysql_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          archive="dist/mysql-${MYSQL_VERSION}-${ARCH}.tar.zst"
+          tar -C "dist/mysql/${MYSQL_VERSION}" --zstd -cf "$archive" .
+          shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
+          wc -c < "$archive" | tr -d ' ' > "$archive.size"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mysql-${{ inputs.mysql_version }}-${{ matrix.arch }}
+          path: |
+            dist/mysql-${{ inputs.mysql_version }}-${{ matrix.arch }}.tar.zst
+            dist/mysql-${{ inputs.mysql_version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/mysql-${{ inputs.mysql_version }}-${{ matrix.arch }}.tar.zst.size
+
   publish:
     name: publish manifest + release
-    needs: build-php
+    needs: [build-php, build-postgres, build-redis, build-mysql]
     runs-on: ubuntu-latest
 
     steps:
@@ -94,7 +247,9 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p dist
-          find artifacts -type f -name 'php-fpm-*' -exec cp {} dist/ \;
+          find artifacts -type f \( \
+            -name 'php-fpm-*' -o -name 'postgres-*' -o -name 'redis-*' -o -name 'mysql-*' \
+          \) -exec cp {} dist/ \;
           ls -lah dist
 
       - name: Generate manifest
@@ -127,5 +282,5 @@ jobs:
         run: |
           gh release create "${{ inputs.release_tag }}" \
             --title "PortBay runtimes ${{ inputs.release_tag }}" \
-            --notes "PortBay managed PHP runtime ${{ inputs.php_version }}." \
+            --notes "PortBay managed runtimes: PHP ${{ inputs.php_version }}, PostgreSQL ${{ inputs.postgres_version }}, MySQL ${{ inputs.mysql_version }}, Redis ${{ inputs.redis_version }}." \
             dist/*

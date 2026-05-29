@@ -27,12 +27,40 @@ common PHP apps without shipping every PECL module:
 
 `bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib`
 
+## Database engines
+
+Installed on demand by the app and preferred over any Homebrew/system copy.
+Every binary the app needs lives under `bin/` so it resolves relative to the
+install root. arm64-only, like PHP.
+
+- **PostgreSQL** (`build-postgres-runtime.sh`, source build):
+  - `bin/postgres` (daemon), `bin/psql`, `bin/initdb`, `bin/pg_dump`, `bin/pg_dumpall`, …
+  - `lib/libpq.*.dylib`, `share/postgresql/` (located relative to `bin/`)
+  - Built `--without-icu/readline/zlib`; macOS dylib load paths rewritten to
+    `@rpath`/`@loader_path` so the tree is relocatable.
+- **MySQL** (`build-mysql-runtime.sh`, official macOS tarball, repacked):
+  - `bin/mysqld` (daemon), `bin/mysql`, `bin/mysqldump`, … + `lib/`, `share/`
+  - The macOS build tag in the upstream filename changes per release
+    (8.4.4/8.4.5 → `macos15`); set via the `mysql_macos_tag` input.
+- **Redis** (`build-redis-runtime.sh`, source build):
+  - `bin/redis-server` (daemon), `bin/redis-cli`
+  - `BUILD_TLS=no` → links only system libraries (nothing to relocate).
+
+The manifest `lang` for an engine equals the app's `DatabaseEngine::id()`
+(`postgres`/`mysql`/`redis`); `generate-manifest.mjs` maps archive prefixes to it.
+
 ## Release
 
-Run the `release-runtimes` workflow manually with the PHP version to publish.
-The workflow builds both macOS architectures, signs/notarizes the binaries when
-Apple credentials are configured, packages archives, generates `manifest.json`,
-signs it with the Tauri updater private key, and publishes the release.
+Run the `release-runtimes` workflow manually with the runtime versions to
+publish (PHP, PostgreSQL, MySQL, Redis). The workflow builds each runtime
+(arm64), signs/notarizes the binaries when Apple credentials are configured,
+packages archives, generates `manifest.json`, signs it with the Tauri updater
+private key, and publishes the release.
+
+Because their upstreams ship no fetchable checksum sidecar, **Redis and MySQL
+require pinned SHA-256 inputs** (`redis_sha256`, `mysql_sha256_aarch64`); MySQL
+also needs the upstream `mysql_macos_tag`. PostgreSQL verifies against its
+upstream-published checksum automatically.
 
 Required repository secrets:
 
