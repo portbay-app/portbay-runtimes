@@ -51,6 +51,11 @@ if [[ -z "$PHP_BIN" || -z "$FPM_BIN" ]]; then
   exit 1
 fi
 
+# Back to the repo root: the build `cd`'d into $SPC, but $PKG/$OUT_DIR are
+# relative (resolved against the dir the workflow invoked us from). Without
+# this, the packaging cp/tar below target $SPC/dist/… and fail.
+cd "$ROOT"
+
 cp "$PHP_BIN" "$PKG/bin/php"
 cp "$FPM_BIN" "$PKG/sbin/php-fpm"
 chmod 0755 "$PKG/bin/php" "$PKG/sbin/php-fpm"
