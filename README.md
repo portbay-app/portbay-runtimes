@@ -27,6 +27,13 @@ common PHP apps without shipping every PECL module:
 
 `bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib`
 
+## Node
+
+- Default line: **22.x LTS**. Fetched from the official `nodejs.org/dist`
+  tarball and repacked — **not compiled**; the SHA-256 is verified against
+  Node's published `SHASUMS256.txt` before repacking.
+- Layout: `bin/{node,npm,npx,corepack}` + `lib/node_modules/{npm,corepack}`.
+
 ## Database engines
 
 Installed on demand by the app and preferred over any Homebrew/system copy.
@@ -52,7 +59,7 @@ The manifest `lang` for an engine equals the app's `DatabaseEngine::id()`
 ## Release
 
 Run the `release-runtimes` workflow manually with the runtime versions to
-publish (PHP, PostgreSQL, MySQL, Redis). The workflow builds each runtime
+publish (PHP, Node, PostgreSQL, MySQL, Redis). The workflow builds each runtime
 (arm64), signs/notarizes the binaries when Apple credentials are configured,
 packages archives, generates `manifest.json`, signs it with the Tauri updater
 private key, and publishes the release.

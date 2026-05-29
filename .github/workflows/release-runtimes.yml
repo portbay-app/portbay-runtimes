@@ -7,6 +7,10 @@ on:
         description: "PHP version to build"
         required: true
         default: "8.4.21"
+      node_version:
+        description: "Node version to build (LTS recommended)"
+        required: true
+        default: "22.14.0"
       postgres_version:
         description: "PostgreSQL version (source build; checksum auto-verified)"
         required: true
@@ -102,6 +106,47 @@ jobs:
             dist/php-fpm-${{ inputs.php_version }}-${{ matrix.arch }}.tar.zst
             dist/php-fpm-${{ inputs.php_version }}-${{ matrix.arch }}.tar.zst.sha256
             dist/php-fpm-${{ inputs.php_version }}-${{ matrix.arch }}.tar.zst.size
+
+  build-node:
+    name: build node ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: brew install zstd
+      - name: Build Node runtime
+        env:
+          NODE_VERSION: ${{ inputs.node_version }}
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/build-node-runtime.sh
+      - name: Developer ID sign runtime executables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign-notarize-runtime.sh "dist/node/${{ inputs.node_version }}"
+      - name: Repack after signing
+        env:
+          NODE_VERSION: ${{ inputs.node_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          archive="dist/node-${NODE_VERSION}-${ARCH}.tar.zst"
+          tar -C "dist/node/${NODE_VERSION}" --zstd -cf "$archive" .
+          shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
+          wc -c < "$archive" | tr -d ' ' > "$archive.size"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-${{ inputs.node_version }}-${{ matrix.arch }}
+          path: |
+            dist/node-${{ inputs.node_version }}-${{ matrix.arch }}.tar.zst
+            dist/node-${{ inputs.node_version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/node-${{ inputs.node_version }}-${{ matrix.arch }}.tar.zst.size
 
   # Database engines — arm64-only, matching build-php (the app ships arm64-only;
   # Intel macos-13 runners queue indefinitely). Re-add an x86_64 matrix entry if
@@ -234,7 +279,7 @@ jobs:
 
   publish:
     name: publish manifest + release
-    needs: [build-php, build-postgres, build-redis, build-mysql]
+    needs: [build-php, build-node, build-postgres, build-redis, build-mysql]
     runs-on: ubuntu-latest
 
     steps:
@@ -248,7 +293,8 @@ jobs:
         run: |
           mkdir -p dist
           find artifacts -type f \( \
-            -name 'php-fpm-*' -o -name 'postgres-*' -o -name 'redis-*' -o -name 'mysql-*' \
+            -name 'php-fpm-*' -o -name 'node-*' -o -name 'postgres-*' \
+            -o -name 'redis-*' -o -name 'mysql-*' \
           \) -exec cp {} dist/ \;
           ls -lah dist
 
@@ -282,5 +328,5 @@ jobs:
         run: |
           gh release create "${{ inputs.release_tag }}" \
             --title "PortBay runtimes ${{ inputs.release_tag }}" \
-            --notes "PortBay managed runtimes: PHP ${{ inputs.php_version }}, PostgreSQL ${{ inputs.postgres_version }}, MySQL ${{ inputs.mysql_version }}, Redis ${{ inputs.redis_version }}." \
+            --notes "PortBay managed runtimes: PHP ${{ inputs.php_version }}, Node.js ${{ inputs.node_version }}, PostgreSQL ${{ inputs.postgres_version }}, MySQL ${{ inputs.mysql_version }}, Redis ${{ inputs.redis_version }}." \
             dist/*

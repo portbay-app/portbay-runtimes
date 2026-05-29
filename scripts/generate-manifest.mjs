@@ -13,10 +13,11 @@ const entries = [];
 for (const name of readdirSync(dist)) {
   // Archive prefix → the manifest `lang` the app filters on:
   //   php-fpm-*  → "php"  (the PHP build ships php + php-fpm)
+  //   node-*     → "node"
   //   <engine>-* → "<engine>" for database engines, matching DatabaseEngine::id()
   //                ("mysql"/"mariadb"/"postgres"/"redis"/"mongo"/"memcached")
   const match =
-    /^(php-fpm|mysql|mariadb|postgres|redis|mongo|memcached)-(.+)-(aarch64|x86_64)\.tar\.zst$/.exec(
+    /^(php-fpm|node|mysql|mariadb|postgres|redis|mongo|memcached)-(.+)-(aarch64|x86_64)\.tar\.zst$/.exec(
       name,
     );
   if (!match) continue;
