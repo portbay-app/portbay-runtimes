@@ -19,10 +19,13 @@ set -euo pipefail
 # MYSQL_MACOS_TAG must match the chosen version. Integrity is a caller-pinned
 # SHA-256 (no checksum sidecar on the CDN).
 
-MYSQL_VERSION="${MYSQL_VERSION:-${1:-8.4.4}}"
+MYSQL_VERSION="${MYSQL_VERSION:-${1:-8.4.5}}"
 OUT_DIR="${OUT_DIR:-${2:-dist}}"
 MYSQL_SHA256="${MYSQL_SHA256:-${3:-}}"
-MYSQL_MACOS_TAG="${MYSQL_MACOS_TAG:-macos14}"
+# The macOS build tag is baked into the upstream filename and changes between
+# releases (8.4.0–8.4.3 → macos14, 8.4.4/8.4.5 → macos15). Keep this in step
+# with MYSQL_VERSION's default above.
+MYSQL_MACOS_TAG="${MYSQL_MACOS_TAG:-macos15}"
 ARCH="${ARCH:-$(uname -m)}"
 
 case "$ARCH" in
