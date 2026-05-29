@@ -46,9 +46,11 @@ PKG="$OUT_DIR/mysql/$MYSQL_VERSION"
 rm -rf "$WORK" "$PKG"
 mkdir -p "$WORK" "$OUT_DIR"
 
-MAJOR_MINOR="${MYSQL_VERSION%.*}"   # 8.4.4 → 8.4
+MAJOR_MINOR="${MYSQL_VERSION%.*}"   # 8.4.5 → 8.4
 TARBALL="mysql-${MYSQL_VERSION}-${MYSQL_MACOS_TAG}-${MYSQL_ARCH}.tar.gz"
-URL="https://cdn.mysql.com/Downloads/MySQL-${MAJOR_MINOR}/${TARBALL}"
+# Use the dev.mysql.com download entrypoint, which 302-redirects to the signed
+# CDN object (-L follows it). The bare cdn.mysql.com path 404s.
+URL="https://dev.mysql.com/get/Downloads/MySQL-${MAJOR_MINOR}/${TARBALL}"
 
 echo "Downloading $TARBALL …"
 curl -fsSL "$URL" -o "$WORK/$TARBALL"

@@ -77,6 +77,10 @@ jobs:
         env:
           PHP_VERSION: ${{ inputs.php_version }}
           ARCH: ${{ matrix.arch }}
+          # static-php-cli pulls its deps (xz, etc.) from the GitHub API;
+          # unauthenticated it hits the 60/hr limit on shared runner IPs. A
+          # token raises that to 5000/hr so the dependency fetch is reliable.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           bash scripts/build-php-runtime.sh
 
