@@ -34,6 +34,18 @@ common PHP apps without shipping every PECL module:
   Node's published `SHASUMS256.txt` before repacking.
 - Layout: `bin/{node,npm,npx,corepack}` + `lib/node_modules/{npm,corepack}`.
 
+## Ollama
+
+- Fetched from the official GitHub release (`ollama-darwin.tgz`) and repacked —
+  **not compiled**; the SHA-256 is verified against the `sha256sum.txt` Ollama
+  publishes with each release (`build-ollama-runtime.sh`).
+- Layout: the whole flat tarball lands under `bin/` (`bin/ollama` plus
+  `llama-server`, `llama-quantize`, and the `libggml-*.so` runners) — Ollama
+  discovers its runner libraries relative to the executable, so the siblings
+  must stay next to `bin/ollama`.
+- Installed on demand from the AI page (not registered as a language runtime);
+  the app prefers it over any Homebrew/system/Ollama.app copy.
+
 ## Database engines
 
 Installed on demand by the app and preferred over any Homebrew/system copy.
