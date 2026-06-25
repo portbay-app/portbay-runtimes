@@ -59,7 +59,7 @@ jobs:
           # `{ arch: x86_64, runner: <intel-runner> }` entry if Intel is ever shipped.
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build prerequisites
         run: |
@@ -118,7 +118,7 @@ jobs:
             runner: macos-14
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install build prerequisites
         run: brew install zstd
       - name: Build Node runtime
@@ -162,7 +162,7 @@ jobs:
             runner: macos-14
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install build prerequisites
         run: brew install zstd
       - name: Build PostgreSQL runtime
@@ -203,7 +203,7 @@ jobs:
             runner: macos-14
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install build prerequisites
         run: brew install zstd
       - name: Build Redis runtime
@@ -245,7 +245,7 @@ jobs:
             runner: macos-14
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install build prerequisites
         run: brew install zstd
       - name: Build MySQL runtime
@@ -283,7 +283,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v4
         with:
