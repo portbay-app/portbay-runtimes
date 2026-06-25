@@ -99,7 +99,7 @@ jobs:
           wc -c < "$archive" | tr -d ' ' > "$archive.size"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: php-${{ inputs.php_version }}-${{ matrix.arch }}
           path: |
@@ -140,7 +140,7 @@ jobs:
           shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
           wc -c < "$archive" | tr -d ' ' > "$archive.size"
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: node-${{ inputs.node_version }}-${{ matrix.arch }}
           path: |
@@ -184,7 +184,7 @@ jobs:
           shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
           wc -c < "$archive" | tr -d ' ' > "$archive.size"
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: postgres-${{ inputs.postgres_version }}-${{ matrix.arch }}
           path: |
@@ -226,7 +226,7 @@ jobs:
           shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
           wc -c < "$archive" | tr -d ' ' > "$archive.size"
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: redis-${{ inputs.redis_version }}-${{ matrix.arch }}
           path: |
@@ -269,7 +269,7 @@ jobs:
           shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
           wc -c < "$archive" | tr -d ' ' > "$archive.size"
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mysql-${{ inputs.mysql_version }}-${{ matrix.arch }}
           path: |
