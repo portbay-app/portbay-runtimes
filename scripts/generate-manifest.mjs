@@ -17,13 +17,16 @@ for (const name of readdirSync(dist)) {
   //   ollama-*   → "ollama" (AI page managed install)
   //   <engine>-* → "<engine>" for database engines, matching DatabaseEngine::id()
   //                ("mysql"/"mariadb"/"postgres"/"redis"/"mongo"/"memcached")
+  //   nginx-*    → "nginx"  (web server, `managed_web_server_binary`)
+  //   httpd-*    → "apache" (web server; the app's WebServer id, not the binary name)
   const match =
-    /^(php-fpm|node|ollama|mysql|mariadb|postgres|redis|mongo|memcached)-(.+)-(aarch64|x86_64)\.tar\.zst$/.exec(
+    /^(php-fpm|node|ollama|mysql|mariadb|postgres|redis|mongo|memcached|nginx|httpd)-(.+)-(aarch64|x86_64)\.tar\.zst$/.exec(
       name,
     );
   if (!match) continue;
   const [, prefix, version, arch] = match;
-  const lang = prefix === "php-fpm" ? "php" : prefix;
+  const LANG = { "php-fpm": "php", httpd: "apache" };
+  const lang = LANG[prefix] ?? prefix;
   const archive = join(dist, name);
   entries.push({
     lang,

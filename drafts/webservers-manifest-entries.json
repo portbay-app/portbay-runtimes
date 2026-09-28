@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-28T00:00:00Z",
+  "entries": [
+    {
+      "lang": "apache",
+      "version": "2.4.68",
+      "arch": "aarch64",
+      "url": "https://github.com/portbay-app/portbay-runtimes/releases/download/runtimes-webservers-draft/httpd-2.4.68-aarch64.tar.zst",
+      "sha256": "4f66c9d4c0cceb1a4033c8d8e982652cd43fc043a12f0a4f7ad800fb37fc3c14",
+      "size": 851368,
+      "compression": "zstd"
+    },
+    {
+      "lang": "apache",
+      "version": "2.4.68",
+      "arch": "x86_64",
+      "url": "https://github.com/portbay-app/portbay-runtimes/releases/download/runtimes-webservers-draft/httpd-2.4.68-x86_64.tar.zst",
+      "sha256": "912d17f1345acfc723538418645399c6b62ffb0fd8c43e02d5cb13df376cf1fe",
+      "size": 884383,
+      "compression": "zstd"
+    },
+    {
+      "lang": "nginx",
+      "version": "1.31.6",
+      "arch": "aarch64",
+      "url": "https://github.com/portbay-app/portbay-runtimes/releases/download/runtimes-webservers-draft/nginx-1.31.6-aarch64.tar.zst",
+      "sha256": "c0bbfa20cf4ae3fd970a8a94efea456ee513af709f588851134666235ec958da",
+      "size": 601855,
+      "compression": "zstd"
+    },
+    {
+      "lang": "nginx",
+      "version": "1.31.6",
+      "arch": "x86_64",
+      "url": "https://github.com/portbay-app/portbay-runtimes/releases/download/runtimes-webservers-draft/nginx-1.31.6-x86_64.tar.zst",
+      "sha256": "f27d234b0c6363cd8691bd9ea01b04008c82d684737fc9bfba5459df09c6bf4a",
+      "size": 645302,
+      "compression": "zstd"
+    }
+  ]
+}
