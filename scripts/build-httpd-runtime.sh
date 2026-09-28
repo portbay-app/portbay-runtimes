@@ -49,7 +49,7 @@ PCRE2_SHA256="${PCRE2_SHA256:-b6c68fdf6f3ac31388b50aa89ff0fc49c00c987c16e7b51464
 
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 
-MODULES="mpm_event unixd authz_core authz_host dir mime rewrite setenvif log_config proxy proxy_fcgi headers"
+MODULES="mpm_event unixd authz_core authz_host dir mime rewrite setenvif log_config proxy proxy_fcgi proxy_http headers"
 
 case "$ARCH" in
   arm64|aarch64) MANIFEST_ARCH="aarch64"; LIPO_ARCH="arm64" ;;
@@ -250,6 +250,8 @@ mkdir -p "$SMOKE/run/docroot"
   echo "TypesConfig \"$U/conf/mime.types\""
   echo "RewriteEngine On"
   echo "SetEnvIfNoCase X-Forwarded-Proto \"^https\$\" HTTPS=on"
+  # The reverse-proxy config PortBay puts in front of a dev server.
+  echo "ProxyPass \"/app\" \"http://127.0.0.1:9/\" upgrade=websocket flushpackets=on nocanon"
   echo "<FilesMatch \"\\.php\$\">"
   echo "    SetHandler \"proxy:fcgi://127.0.0.1:9\""
   echo "</FilesMatch>"
