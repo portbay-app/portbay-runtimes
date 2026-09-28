@@ -3,6 +3,10 @@ name: release-runtimes
 on:
   workflow_dispatch:
     inputs:
+      runtimes:
+        description: "Runtimes to build: comma list of php,node,ollama,postgres,redis,mysql,nginx,httpd, or all. Unbuilt ones keep their live manifest entries."
+        required: true
+        default: "all"
       php_version:
         description: "PHP version to build"
         required: true
@@ -24,8 +28,8 @@ on:
         required: true
         default: "7.4.1"
       redis_sha256:
-        description: "SHA-256 of redis-<version>.tar.gz"
-        required: true
+        description: "SHA-256 of redis-<version>.tar.gz (required when redis is selected)"
+        required: false
         default: ""
       mysql_version:
         description: "MySQL version (official macOS tarball)"
@@ -36,8 +40,8 @@ on:
         required: true
         default: "macos15"
       mysql_sha256_aarch64:
-        description: "SHA-256 of the MySQL arm64 tarball"
-        required: true
+        description: "SHA-256 of the MySQL arm64 tarball (required when mysql is selected)"
+        required: false
         default: ""
       nginx_version:
         description: "nginx version (source build; PCRE2/zlib pinned in the script)"
@@ -56,8 +60,32 @@ permissions:
   contents: write
 
 jobs:
+  plan:
+    name: select runtimes
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.select.outputs.list }}
+      php: ${{ steps.select.outputs.php }}
+      node: ${{ steps.select.outputs.node }}
+      ollama: ${{ steps.select.outputs.ollama }}
+      postgres: ${{ steps.select.outputs.postgres }}
+      redis: ${{ steps.select.outputs.redis }}
+      mysql: ${{ steps.select.outputs.mysql }}
+      nginx: ${{ steps.select.outputs.nginx }}
+      httpd: ${{ steps.select.outputs.httpd }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: select
+        env:
+          RUNTIMES: ${{ inputs.runtimes }}
+          REDIS_SHA256: ${{ inputs.redis_sha256 }}
+          MYSQL_SHA256: ${{ inputs.mysql_sha256_aarch64 }}
+        run: bash scripts/select-runtimes.sh
+
   build-php:
     name: build php ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.php == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -121,6 +149,8 @@ jobs:
 
   build-node:
     name: build node ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.node == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -162,6 +192,8 @@ jobs:
 
   build-ollama:
     name: build ollama ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.ollama == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -206,6 +238,8 @@ jobs:
   # an Intel build is ever shipped.
   build-postgres:
     name: build postgres ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.postgres == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -247,6 +281,8 @@ jobs:
 
   build-redis:
     name: build redis ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.redis == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -289,6 +325,8 @@ jobs:
 
   build-mysql:
     name: build mysql ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.mysql == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -335,6 +373,8 @@ jobs:
   # x86_64 archive must be run on Intel or Rosetta before it is published.
   build-nginx:
     name: build nginx ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.nginx == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -376,6 +416,8 @@ jobs:
 
   build-httpd:
     name: build httpd ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.httpd == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -417,7 +459,10 @@ jobs:
 
   publish:
     name: publish manifest + release
-    needs: [build-php, build-node, build-ollama, build-postgres, build-redis, build-mysql, build-nginx, build-httpd]
+    needs: [plan, build-php, build-node, build-ollama, build-postgres, build-redis, build-mysql, build-nginx, build-httpd]
+    # Unselected build jobs are skipped, and a skipped need skips this job by
+    # default. Run unless something failed or was cancelled.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -437,11 +482,27 @@ jobs:
           \) -exec cp {} dist/ \;
           ls -lah dist
 
+      # This release becomes releases/latest, so its manifest replaces the one
+      # every installed app reads. Start from the live one so a subset run
+      # cannot drop a runtime it did not rebuild.
+      - name: Fetch live manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p live
+          gh release download --repo "${{ github.repository }}" --pattern manifest.json --dir live
+          test -s live/manifest.json
+
       - name: Generate manifest
+        env:
+          SELECTED: ${{ needs.plan.outputs.list }}
         run: |
           node scripts/generate-manifest.mjs \
             dist \
-            "https://github.com/portbay-app/portbay-runtimes/releases/download/${{ inputs.release_tag }}"
+            "https://github.com/portbay-app/portbay-runtimes/releases/download/${{ inputs.release_tag }}" \
+            --live live/manifest.json \
+            --selected "$SELECTED" \
+            --require php@8.4.21
 
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
@@ -464,8 +525,22 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          SELECTED: ${{ needs.plan.outputs.list }}
         run: |
+          built=""
+          for r in ${SELECTED//,/ }; do
+            case "$r" in
+              php)      built+=", PHP ${{ inputs.php_version }}" ;;
+              node)     built+=", Node.js ${{ inputs.node_version }}" ;;
+              ollama)   built+=", Ollama ${{ inputs.ollama_version }}" ;;
+              postgres) built+=", PostgreSQL ${{ inputs.postgres_version }}" ;;
+              mysql)    built+=", MySQL ${{ inputs.mysql_version }}" ;;
+              redis)    built+=", Redis ${{ inputs.redis_version }}" ;;
+              nginx)    built+=", nginx ${{ inputs.nginx_version }}" ;;
+              httpd)    built+=", Apache httpd ${{ inputs.httpd_version }}" ;;
+            esac
+          done
           gh release create "${{ inputs.release_tag }}" \
             --title "PortBay runtimes ${{ inputs.release_tag }}" \
-            --notes "PortBay managed runtimes: PHP ${{ inputs.php_version }}, Node.js ${{ inputs.node_version }}, Ollama ${{ inputs.ollama_version }}, PostgreSQL ${{ inputs.postgres_version }}, MySQL ${{ inputs.mysql_version }}, Redis ${{ inputs.redis_version }}, nginx ${{ inputs.nginx_version }}, Apache httpd ${{ inputs.httpd_version }}." \
+            --notes "PortBay managed runtimes built in this release: ${built#, }. The manifest also carries every entry of the previous one that was not rebuilt." \
             dist/*

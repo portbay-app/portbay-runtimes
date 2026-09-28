@@ -112,9 +112,18 @@ publish (PHP, Node, PostgreSQL, MySQL, Redis, nginx, Apache httpd). The workflow
 packages archives, generates `manifest.json`, signs it with the Tauri updater
 private key, and publishes the release.
 
+The `runtimes` input picks what to build: `all` (default) or a comma list of
+`php,node,ollama,postgres,redis,mysql,nginx,httpd`. Unselected build jobs are
+skipped. The new release becomes `releases/latest`, so its manifest replaces
+the one every installed app reads: `generate-manifest.mjs --live` starts from
+the current live manifest and keeps every entry this run did not rebuild, with
+its URL into the release that published it. Deleting an older release
+therefore breaks the entries still pointing at it. The publish job refuses to
+sign or publish a manifest without PHP 8.4.21 (`--require php@8.4.21`).
+
 Because their upstreams ship no fetchable checksum sidecar, **Redis and MySQL
-require pinned SHA-256 inputs** (`redis_sha256`, `mysql_sha256_aarch64`); MySQL
-also needs the upstream `mysql_macos_tag`. PostgreSQL verifies against its
+require pinned SHA-256 inputs when selected** (`redis_sha256`,
+`mysql_sha256_aarch64`); MySQL also needs the upstream `mysql_macos_tag`. PostgreSQL verifies against its
 upstream-published checksum automatically.
 
 Required repository secrets:
