@@ -20,6 +20,10 @@ SPC="$WORK/static-php-cli"
 BUILD="$WORK/buildroot"
 PKG="$OUT_DIR/php/$PHP_VERSION"
 EXTENSIONS="${PHP_EXTENSIONS:-bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib}"
+# GD links only the image codecs static-php-cli is told to build. Without
+# these it ships PNG/GIF only, and Laravel image libraries (Intervention,
+# spatie/image, medialibrary) fail on the first JPEG or WebP upload.
+PHP_LIBS="${PHP_LIBS:-libjpeg,libwebp,freetype,libavif}"
 
 rm -rf "$WORK" "$PKG"
 mkdir -p "$WORK" "$PKG/bin" "$PKG/sbin" "$PKG/etc" "$PKG/lib" "$PKG/extensions" "$OUT_DIR"
@@ -42,6 +46,7 @@ php bin/spc doctor --auto-fix=never || true
 php bin/spc build:php "$EXTENSIONS" \
   --build-cli \
   --build-fpm \
+  --with-libs="$PHP_LIBS" \
   --dl-with-php="$PHP_VERSION" \
   --dl-prefer-binary \
   --dl-parallel="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
@@ -72,6 +77,17 @@ INI
 
 "$PKG/bin/php" --version
 "$PKG/sbin/php-fpm" --version
+
+# Fail the build rather than publish a GD that cannot read the formats above.
+"$PKG/bin/php" -r '
+  $gd = gd_info();
+  $missing = [];
+  foreach (["JPEG Support", "PNG Support", "WebP Support", "FreeType Support", "AVIF Support"] as $k) {
+    if (empty($gd[$k])) { $missing[] = $k; }
+  }
+  if ($missing) { fwrite(STDERR, "gd is missing: " . implode(", ", $missing) . "\n"); exit(1); }
+  echo "gd: JPEG, PNG, WebP, FreeType, AVIF\n";
+'
 
 ARCHIVE="$OUT_DIR/php-fpm-$PHP_VERSION-$MANIFEST_ARCH.tar.zst"
 tar -C "$PKG" --zstd -cf "$ARCHIVE" .
