@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PHP_VERSION="${PHP_VERSION:-${1:-8.4.21}}"
+PHP_VERSION="${PHP_VERSION:-${1:-8.4.27}}"
 OUT_DIR="${OUT_DIR:-${2:-dist}}"
 ARCH="${ARCH:-$(uname -m)}"
 
@@ -77,6 +77,15 @@ INI
 
 "$PKG/bin/php" --version
 "$PKG/sbin/php-fpm" --version
+
+# The archive is named after the requested version, so a build that resolved to
+# any other patch would ship under the wrong name. Refuse rather than mislabel.
+got_cli="$("$PKG/bin/php" -r 'echo PHP_VERSION;')"
+got_fpm="$("$PKG/sbin/php-fpm" -v | head -1 | awk '{print $2}')"
+if [ "$got_cli" != "$PHP_VERSION" ] || [ "$got_fpm" != "$PHP_VERSION" ]; then
+  echo "built php $got_cli / php-fpm $got_fpm, expected $PHP_VERSION" >&2
+  exit 1
+fi
 
 # Fail the build rather than publish a GD that cannot read the formats above.
 "$PKG/bin/php" -r '
