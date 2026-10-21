@@ -68,10 +68,16 @@ jobs:
           brew update
           brew install autoconf automake bison re2c pkg-config zstd
 
+      # The host PHP only drives static-php-cli. A prebuilt one: `brew install
+      # php` compiles from source whenever Homebrew bumps php before its bottle
+      # exists, which is exactly the day a PHP security release lands.
       - name: Install PHP build driver
-        run: |
-          brew install php
-          brew install composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, zlib, curl, openssl, tokenizer, phar, filter, xml
+          tools: composer
+          coverage: none
 
       - name: Build PHP runtime
         env:
