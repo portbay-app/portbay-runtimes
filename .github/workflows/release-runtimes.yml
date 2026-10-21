@@ -8,25 +8,25 @@ on:
         required: false
         default: "8.4.27"
       node_version:
-        description: "Node version to build (LTS recommended)"
+        description: "Node version to build (LTS recommended); empty skips it (last released: 22.14.0)"
         required: false
-        default: "22.14.0"
+        default: ""
       postgres_version:
-        description: "PostgreSQL version (source build; checksum auto-verified)"
+        description: "PostgreSQL version (source build; checksum auto-verified); empty skips it (last released: 16.4)"
         required: false
-        default: "16.4"
+        default: ""
       redis_version:
-        description: "Redis version (source build)"
+        description: "Redis version (source build); empty skips it (last released: 7.4.1)"
         required: false
-        default: "7.4.1"
+        default: ""
       redis_sha256:
         description: "SHA-256 of redis-<version>.tar.gz"
         required: false
         default: ""
       mysql_version:
-        description: "MySQL version (official macOS tarball)"
+        description: "MySQL version (official macOS tarball); empty skips it (last released: 8.4.5)"
         required: false
-        default: "8.4.5"
+        default: ""
       mysql_macos_tag:
         description: "macOS build tag in the MySQL tarball name (8.4.4/8.4.5 → macos15)"
         required: false
