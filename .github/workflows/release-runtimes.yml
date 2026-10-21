@@ -4,36 +4,36 @@ on:
   workflow_dispatch:
     inputs:
       php_version:
-        description: "PHP version to build"
-        required: true
-        default: "8.4.21"
+        description: "PHP version to build (empty skips PHP)"
+        required: false
+        default: "8.4.27"
       node_version:
-        description: "Node version to build (LTS recommended)"
-        required: true
-        default: "22.14.0"
+        description: "Node version to build (LTS recommended); empty skips it (last released: 22.14.0)"
+        required: false
+        default: ""
       postgres_version:
-        description: "PostgreSQL version (source build; checksum auto-verified)"
-        required: true
-        default: "16.4"
+        description: "PostgreSQL version (source build; checksum auto-verified); empty skips it (last released: 16.4)"
+        required: false
+        default: ""
       redis_version:
-        description: "Redis version (source build)"
-        required: true
-        default: "7.4.1"
+        description: "Redis version (source build); empty skips it (last released: 7.4.1)"
+        required: false
+        default: ""
       redis_sha256:
         description: "SHA-256 of redis-<version>.tar.gz"
-        required: true
+        required: false
         default: ""
       mysql_version:
-        description: "MySQL version (official macOS tarball)"
-        required: true
-        default: "8.4.5"
+        description: "MySQL version (official macOS tarball); empty skips it (last released: 8.4.5)"
+        required: false
+        default: ""
       mysql_macos_tag:
         description: "macOS build tag in the MySQL tarball name (8.4.4/8.4.5 → macos15)"
-        required: true
+        required: false
         default: "macos15"
       mysql_sha256_aarch64:
         description: "SHA-256 of the MySQL arm64 tarball"
-        required: true
+        required: false
         default: ""
       release_tag:
         description: "Release tag"
@@ -46,6 +46,8 @@ permissions:
 jobs:
   build-php:
     name: build php ${{ matrix.arch }}
+    # An empty version skips this runtime, so one runtime can be re-released alone.
+    if: ${{ inputs.php_version != '' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -66,10 +68,16 @@ jobs:
           brew update
           brew install autoconf automake bison re2c pkg-config zstd
 
+      # The host PHP only drives static-php-cli. A prebuilt one: `brew install
+      # php` compiles from source whenever Homebrew bumps php before its bottle
+      # exists, which is exactly the day a PHP security release lands.
       - name: Install PHP build driver
-        run: |
-          brew install php
-          brew install composer
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, zlib, curl, openssl, tokenizer, phar, filter, xml
+          tools: composer
+          coverage: none
 
       - name: Build PHP runtime
         env:
@@ -109,6 +117,8 @@ jobs:
 
   build-node:
     name: build node ${{ matrix.arch }}
+    # An empty version skips this runtime, so one runtime can be re-released alone.
+    if: ${{ inputs.node_version != '' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -153,6 +163,8 @@ jobs:
   # an Intel build is ever shipped.
   build-postgres:
     name: build postgres ${{ matrix.arch }}
+    # An empty version skips this runtime, so one runtime can be re-released alone.
+    if: ${{ inputs.postgres_version != '' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -194,6 +206,8 @@ jobs:
 
   build-redis:
     name: build redis ${{ matrix.arch }}
+    # An empty version skips this runtime, so one runtime can be re-released alone.
+    if: ${{ inputs.redis_version != '' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -236,6 +250,8 @@ jobs:
 
   build-mysql:
     name: build mysql ${{ matrix.arch }}
+    # An empty version skips this runtime, so one runtime can be re-released alone.
+    if: ${{ inputs.mysql_version != '' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -280,6 +296,9 @@ jobs:
   publish:
     name: publish manifest + release
     needs: [build-php, build-node, build-postgres, build-redis, build-mysql]
+    # Skipped builds are fine (their version was left empty); a failed or
+    # cancelled one is not, so a partial set is never published.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -325,8 +344,17 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          PHP_V: ${{ inputs.php_version }}
+          NODE_V: ${{ inputs.node_version }}
+          PG_V: ${{ inputs.postgres_version }}
+          MYSQL_V: ${{ inputs.mysql_version }}
+          REDIS_V: ${{ inputs.redis_version }}
         run: |
+          built=""
+          for pair in "PHP:$PHP_V" "Node.js:$NODE_V" "PostgreSQL:$PG_V" "MySQL:$MYSQL_V" "Redis:$REDIS_V"; do
+            if [ -n "${pair#*:}" ]; then built="${built:+$built, }${pair%%:*} ${pair#*:}"; fi
+          done
           gh release create "${{ inputs.release_tag }}" \
             --title "PortBay runtimes ${{ inputs.release_tag }}" \
-            --notes "PortBay managed runtimes: PHP ${{ inputs.php_version }}, Node.js ${{ inputs.node_version }}, PostgreSQL ${{ inputs.postgres_version }}, MySQL ${{ inputs.mysql_version }}, Redis ${{ inputs.redis_version }}." \
+            --notes "PortBay managed runtimes: ${built}." \
             dist/*
