@@ -1,8 +1,8 @@
 name: check-php-releases
 
-# Weekly: if php.net has a newer patch of a PHP line the live manifest already
-# ships, dispatch release-runtimes for it. Patch bumps only; a minor line not
-# in the manifest is never started automatically.
+# Weekly: if php.net has a newer patch of a PHP line the merged release
+# manifests already ship, dispatch release-runtimes for it. Patch bumps only;
+# a minor line not in the manifests is never started automatically.
 on:
   schedule:
     - cron: "17 6 * * 1"
@@ -21,7 +21,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - name: Compare php.net with the live manifest
+      - uses: actions/checkout@v4
+
+      - name: Compare php.net with the shipped manifests
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -29,7 +31,9 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run || false }}
         run: |
           set -euo pipefail
-          curl -fsSL "https://github.com/$REPO/releases/latest/download/manifest.json" -o manifest.json
+          # Every release's manifest merged, as publish sees it, so a partial
+          # latest manifest cannot hide a line that is still shipped.
+          node scripts/merge-manifest.mjs base --repo "$REPO" --out manifest.json
           shipped="$(jq -r '.entries[] | select(.lang == "php") | .version' manifest.json | sort -uV)"
           echo "manifest php versions: ${shipped//$'\n'/ }"
 
@@ -59,5 +63,5 @@ jobs:
               continue
             fi
             gh workflow run release-runtimes.yml -R "$REPO" --ref "$REF" \
-              -f php_version="$latest" -f release_tag="$tag"
+              -f runtimes=php -f php_version="$latest" -f release_tag="$tag"
           done
