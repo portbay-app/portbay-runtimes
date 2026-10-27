@@ -9,6 +9,10 @@ on:
         description: "Runtimes to build: comma list of php,node,ollama,postgres,redis,mysql,nginx,httpd, or all. Unbuilt ones keep their manifest entries."
         required: true
         default: "php"
+      allow_drop:
+        description: "Comma list of lang/arch pairs (e.g. redis/aarch64) this release may remove from the manifest. Empty refuses any drop."
+        required: false
+        default: ""
       php_version:
         description: "PHP version (used when php is selected)"
         required: false
@@ -498,19 +502,22 @@ jobs:
           ls -lah dist
 
       # This release becomes releases/latest, so its manifest replaces the one
-      # every installed app reads. Start from the live one so a subset run
+      # every installed app reads. Start from every earlier release's manifest,
+      # not just the latest (which can itself be partial), so a subset run
       # cannot drop a runtime it did not rebuild.
-      - name: Fetch live manifest
+      - name: Merge earlier manifests
         env:
           GH_TOKEN: ${{ github.token }}
+          ALLOW_DROP: ${{ inputs.allow_drop }}
         run: |
           mkdir -p live
-          gh release download --repo "${{ github.repository }}" --pattern manifest.json --dir live
-          test -s live/manifest.json
+          node scripts/merge-manifest.mjs base --repo "${{ github.repository }}" --out live/base.json
+          node scripts/merge-manifest.mjs drop --in live/base.json --out live/manifest.json --allow-drop "$ALLOW_DROP"
 
       - name: Generate manifest
         env:
           SELECTED: ${{ needs.plan.outputs.list }}
+          ALLOW_DROP: ${{ inputs.allow_drop }}
         run: |
           node scripts/generate-manifest.mjs \
             dist \
@@ -518,6 +525,7 @@ jobs:
             --live live/manifest.json \
             --selected "$SELECTED" \
             --require php@8.4.21
+          node scripts/merge-manifest.mjs guard --base live/base.json --new dist/manifest.json --allow-drop "$ALLOW_DROP"
 
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli

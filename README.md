@@ -128,14 +128,19 @@ private key, and publishes the release.
 The `runtimes` input picks what to build: `php` (default), `all`, or a comma
 list of `php,node,ollama,postgres,redis,mysql,nginx,httpd`. Unselected build
 jobs are skipped. The new release becomes `releases/latest`, so its manifest
-replaces the one every installed app reads: `generate-manifest.mjs --live`
-starts from the current live manifest and keeps every entry this run did not
+replaces the one every installed app reads. `merge-manifest.mjs base` merges
+the manifest of every earlier release (newer entries win per lang, version and
+arch), and `generate-manifest.mjs --live` keeps every entry this run did not
 rebuild, with its URL into the release that published it. Deleting an older
-release therefore breaks the entries still pointing at it. The publish job
-refuses to sign or publish a manifest without PHP 8.4.21 (`--require php@8.4.21`).
+release therefore breaks the entries still pointing at it (the merge reports
+and leaves out such entries). The publish job refuses a manifest that drops any
+lang/arch an earlier release shipped unless `allow_drop` names it (`redis/aarch64`,
+or `redis` for every arch), and one without PHP 8.4.21 (`--require php@8.4.21`).
+Preview the merged manifest locally, read-only:
+`node scripts/merge-manifest.mjs base --repo portbay-app/portbay-runtimes`.
 
 `check-php-releases` runs weekly (and on demand, with a dry-run option). For
-each PHP line the live manifest already ships, it compares against php.net and,
+each PHP line the merged release manifests already ship, it compares against php.net and,
 when a newer patch exists, dispatches `release-runtimes` (`runtimes=php`) with that
 version and tag `php-<version>`. It never starts a new minor line.
 
