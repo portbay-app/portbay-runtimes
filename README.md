@@ -25,7 +25,20 @@ arch-specific `.tar.zst` archive listed for the requested runtime.
 The first PHP runtime is intentionally broad enough for Laravel, WordPress, and
 common PHP apps without shipping every PECL module:
 
-`bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib`
+`bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbregex,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,readline,redis,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib`
+
+- `mbregex` is separate from `mbstring` in static-php-cli; without it there is
+  no `mb_split`/`mb_ereg*`.
+- `redis` is phpredis (Laravel's default Redis client). `readline` is CLI-only
+  (`artisan tinker`); php-src never builds it into php-fpm.
+- static-php-cli is pinned by commit (`SPC_REF` in `build-php-runtime.sh`,
+  overridable from the environment). Bump it deliberately and rebuild.
+- `scripts/verify-php-runtime.sh <pkg dir>` fails the build, naming each gap,
+  unless php and php-fpm carry the extensions above that Laravel needs and
+  `mb_split`, `Redis` and `readline()` exist. The release job then runs
+  `scripts/smoke-laravel.sh`: a fresh `laravel/laravel` app must install, pass
+  `artisan about` and `composer check-platform-reqs`, and serve a request
+  through the packaged php-fpm.
 
 ## Node
 
@@ -63,6 +76,11 @@ publish (PHP, Node, PostgreSQL, MySQL, Redis). The workflow builds each runtime
 (arm64), signs/notarizes the binaries when Apple credentials are configured,
 packages archives, generates `manifest.json`, signs it with the Tauri updater
 private key, and publishes the release.
+
+`check-php-releases` runs weekly (and on demand, with a dry-run option). For
+each PHP line the live manifest already ships, it compares against php.net and,
+when a newer patch exists, dispatches `release-runtimes` with that PHP version
+and tag `php-<version>`. It never starts a new minor line.
 
 Because their upstreams ship no fetchable checksum sidecar, **Redis and MySQL
 require pinned SHA-256 inputs** (`redis_sha256`, `mysql_sha256_aarch64`); MySQL
