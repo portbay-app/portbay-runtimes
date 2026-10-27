@@ -3,38 +3,56 @@ name: release-runtimes
 on:
   workflow_dispatch:
     inputs:
+      # Only the selected runtimes build; the rest keep their manifest entries.
+      # The default is PHP alone, so a routine dispatch never rebuilds the lot.
+      runtimes:
+        description: "Runtimes to build: comma list of php,node,ollama,postgres,redis,mysql,nginx,httpd, or all. Unbuilt ones keep their manifest entries."
+        required: true
+        default: "php"
       php_version:
-        description: "PHP version to build (empty skips PHP)"
+        description: "PHP version (used when php is selected)"
         required: false
         default: "8.4.27"
       node_version:
-        description: "Node version to build (LTS recommended); empty skips it (last released: 22.14.0)"
+        description: "Node version, LTS recommended (used when node is selected)"
         required: false
-        default: ""
+        default: "22.14.0"
+      ollama_version:
+        description: "Ollama version, official darwin tarball repacked; checksum auto-verified (used when ollama is selected)"
+        required: false
+        default: "0.30.6"
       postgres_version:
-        description: "PostgreSQL version (source build; checksum auto-verified); empty skips it (last released: 16.4)"
+        description: "PostgreSQL version, source build; checksum auto-verified (used when postgres is selected)"
         required: false
-        default: ""
+        default: "16.4"
       redis_version:
-        description: "Redis version (source build); empty skips it (last released: 7.4.1)"
+        description: "Redis version, source build (used when redis is selected)"
         required: false
-        default: ""
+        default: "7.4.1"
       redis_sha256:
-        description: "SHA-256 of redis-<version>.tar.gz"
+        description: "SHA-256 of redis-<version>.tar.gz (required when redis is selected)"
         required: false
         default: ""
       mysql_version:
-        description: "MySQL version (official macOS tarball); empty skips it (last released: 8.4.5)"
+        description: "MySQL version, official macOS tarball (used when mysql is selected)"
         required: false
-        default: ""
+        default: "8.4.5"
       mysql_macos_tag:
         description: "macOS build tag in the MySQL tarball name (8.4.4/8.4.5 → macos15)"
         required: false
         default: "macos15"
       mysql_sha256_aarch64:
-        description: "SHA-256 of the MySQL arm64 tarball"
+        description: "SHA-256 of the MySQL arm64 tarball (required when mysql is selected)"
         required: false
         default: ""
+      nginx_version:
+        description: "nginx version, source build; PCRE2/zlib pinned in the script (used when nginx is selected)"
+        required: false
+        default: "1.31.6"
+      httpd_version:
+        description: "Apache httpd version, source build; checksum auto-verified (used when httpd is selected)"
+        required: false
+        default: "2.4.68"
       release_tag:
         description: "Release tag"
         required: true
@@ -44,10 +62,32 @@ permissions:
   contents: write
 
 jobs:
+  plan:
+    name: select runtimes
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.select.outputs.list }}
+      php: ${{ steps.select.outputs.php }}
+      node: ${{ steps.select.outputs.node }}
+      ollama: ${{ steps.select.outputs.ollama }}
+      postgres: ${{ steps.select.outputs.postgres }}
+      redis: ${{ steps.select.outputs.redis }}
+      mysql: ${{ steps.select.outputs.mysql }}
+      nginx: ${{ steps.select.outputs.nginx }}
+      httpd: ${{ steps.select.outputs.httpd }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: select
+        env:
+          RUNTIMES: ${{ inputs.runtimes }}
+          REDIS_SHA256: ${{ inputs.redis_sha256 }}
+          MYSQL_SHA256: ${{ inputs.mysql_sha256_aarch64 }}
+        run: bash scripts/select-runtimes.sh
+
   build-php:
     name: build php ${{ matrix.arch }}
-    # An empty version skips this runtime, so one runtime can be re-released alone.
-    if: ${{ inputs.php_version != '' }}
+    needs: plan
+    if: needs.plan.outputs.php == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -124,8 +164,8 @@ jobs:
 
   build-node:
     name: build node ${{ matrix.arch }}
-    # An empty version skips this runtime, so one runtime can be re-released alone.
-    if: ${{ inputs.node_version != '' }}
+    needs: plan
+    if: needs.plan.outputs.node == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -165,13 +205,56 @@ jobs:
             dist/node-${{ inputs.node_version }}-${{ matrix.arch }}.tar.zst.sha256
             dist/node-${{ inputs.node_version }}-${{ matrix.arch }}.tar.zst.size
 
+  build-ollama:
+    name: build ollama ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.ollama == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: brew install zstd
+      - name: Build Ollama runtime
+        env:
+          OLLAMA_VERSION: ${{ inputs.ollama_version }}
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/build-ollama-runtime.sh
+      - name: Developer ID sign runtime executables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign-notarize-runtime.sh "dist/ollama/${{ inputs.ollama_version }}"
+      - name: Repack after signing
+        env:
+          OLLAMA_VERSION: ${{ inputs.ollama_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          archive="dist/ollama-${OLLAMA_VERSION}-${ARCH}.tar.zst"
+          tar -C "dist/ollama/${OLLAMA_VERSION}" --zstd -cf "$archive" .
+          shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
+          wc -c < "$archive" | tr -d ' ' > "$archive.size"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ollama-${{ inputs.ollama_version }}-${{ matrix.arch }}
+          path: |
+            dist/ollama-${{ inputs.ollama_version }}-${{ matrix.arch }}.tar.zst
+            dist/ollama-${{ inputs.ollama_version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/ollama-${{ inputs.ollama_version }}-${{ matrix.arch }}.tar.zst.size
+
   # Database engines — arm64-only, matching build-php (the app ships arm64-only;
   # Intel macos-13 runners queue indefinitely). Re-add an x86_64 matrix entry if
   # an Intel build is ever shipped.
   build-postgres:
     name: build postgres ${{ matrix.arch }}
-    # An empty version skips this runtime, so one runtime can be re-released alone.
-    if: ${{ inputs.postgres_version != '' }}
+    needs: plan
+    if: needs.plan.outputs.postgres == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -213,8 +296,8 @@ jobs:
 
   build-redis:
     name: build redis ${{ matrix.arch }}
-    # An empty version skips this runtime, so one runtime can be re-released alone.
-    if: ${{ inputs.redis_version != '' }}
+    needs: plan
+    if: needs.plan.outputs.redis == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -257,8 +340,8 @@ jobs:
 
   build-mysql:
     name: build mysql ${{ matrix.arch }}
-    # An empty version skips this runtime, so one runtime can be re-released alone.
-    if: ${{ inputs.mysql_version != '' }}
+    needs: plan
+    if: needs.plan.outputs.mysql == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -300,12 +383,101 @@ jobs:
             dist/mysql-${{ inputs.mysql_version }}-${{ matrix.arch }}.tar.zst.sha256
             dist/mysql-${{ inputs.mysql_version }}-${{ matrix.arch }}.tar.zst.size
 
+  # Web servers (manifest langs "nginx" / "apache") — aarch64-only like the
+  # rest. Both scripts can cross-build x86_64 from an arm64 runner, but an
+  # x86_64 archive must be run on Intel or Rosetta before it is published.
+  build-nginx:
+    name: build nginx ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.nginx == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: brew install zstd
+      - name: Build nginx runtime
+        env:
+          NGINX_VERSION: ${{ inputs.nginx_version }}
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/build-nginx-runtime.sh
+      - name: Developer ID sign runtime executables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign-notarize-runtime.sh "dist/nginx/${{ inputs.nginx_version }}"
+      - name: Repack after signing
+        env:
+          NGINX_VERSION: ${{ inputs.nginx_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          archive="dist/nginx-${NGINX_VERSION}-${ARCH}.tar.zst"
+          tar -C "dist/nginx/${NGINX_VERSION}" --zstd -cf "$archive" .
+          shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
+          wc -c < "$archive" | tr -d ' ' > "$archive.size"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nginx-${{ inputs.nginx_version }}-${{ matrix.arch }}
+          path: |
+            dist/nginx-${{ inputs.nginx_version }}-${{ matrix.arch }}.tar.zst
+            dist/nginx-${{ inputs.nginx_version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/nginx-${{ inputs.nginx_version }}-${{ matrix.arch }}.tar.zst.size
+
+  build-httpd:
+    name: build httpd ${{ matrix.arch }}
+    needs: plan
+    if: needs.plan.outputs.httpd == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build prerequisites
+        run: brew install zstd
+      - name: Build Apache httpd runtime
+        env:
+          HTTPD_VERSION: ${{ inputs.httpd_version }}
+          ARCH: ${{ matrix.arch }}
+        run: bash scripts/build-httpd-runtime.sh
+      - name: Developer ID sign runtime executables
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: bash scripts/sign-notarize-runtime.sh "dist/httpd/${{ inputs.httpd_version }}"
+      - name: Repack after signing
+        env:
+          HTTPD_VERSION: ${{ inputs.httpd_version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          archive="dist/httpd-${HTTPD_VERSION}-${ARCH}.tar.zst"
+          tar -C "dist/httpd/${HTTPD_VERSION}" --zstd -cf "$archive" .
+          shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
+          wc -c < "$archive" | tr -d ' ' > "$archive.size"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: httpd-${{ inputs.httpd_version }}-${{ matrix.arch }}
+          path: |
+            dist/httpd-${{ inputs.httpd_version }}-${{ matrix.arch }}.tar.zst
+            dist/httpd-${{ inputs.httpd_version }}-${{ matrix.arch }}.tar.zst.sha256
+            dist/httpd-${{ inputs.httpd_version }}-${{ matrix.arch }}.tar.zst.size
+
   publish:
     name: publish manifest + release
-    needs: [build-php, build-node, build-postgres, build-redis, build-mysql]
-    # Skipped builds are fine (their version was left empty); a failed or
-    # cancelled one is not, so a partial set is never published.
-    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') }}
+    needs: [plan, build-php, build-node, build-ollama, build-postgres, build-redis, build-mysql, build-nginx, build-httpd]
+    # Unselected build jobs are skipped, and a skipped need skips this job by
+    # default. Run unless something failed or was cancelled.
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
 
     steps:
@@ -319,16 +491,33 @@ jobs:
         run: |
           mkdir -p dist
           find artifacts -type f \( \
-            -name 'php-fpm-*' -o -name 'node-*' -o -name 'postgres-*' \
-            -o -name 'redis-*' -o -name 'mysql-*' \
+            -name 'php-fpm-*' -o -name 'node-*' -o -name 'ollama-*' \
+            -o -name 'postgres-*' -o -name 'redis-*' -o -name 'mysql-*' \
+            -o -name 'nginx-*' -o -name 'httpd-*' \
           \) -exec cp {} dist/ \;
           ls -lah dist
 
+      # This release becomes releases/latest, so its manifest replaces the one
+      # every installed app reads. Start from the live one so a subset run
+      # cannot drop a runtime it did not rebuild.
+      - name: Fetch live manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p live
+          gh release download --repo "${{ github.repository }}" --pattern manifest.json --dir live
+          test -s live/manifest.json
+
       - name: Generate manifest
+        env:
+          SELECTED: ${{ needs.plan.outputs.list }}
         run: |
           node scripts/generate-manifest.mjs \
             dist \
-            "https://github.com/portbay-app/portbay-runtimes/releases/download/${{ inputs.release_tag }}"
+            "https://github.com/portbay-app/portbay-runtimes/releases/download/${{ inputs.release_tag }}" \
+            --live live/manifest.json \
+            --selected "$SELECTED" \
+            --require php@8.4.21
 
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
@@ -351,17 +540,22 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          PHP_V: ${{ inputs.php_version }}
-          NODE_V: ${{ inputs.node_version }}
-          PG_V: ${{ inputs.postgres_version }}
-          MYSQL_V: ${{ inputs.mysql_version }}
-          REDIS_V: ${{ inputs.redis_version }}
+          SELECTED: ${{ needs.plan.outputs.list }}
         run: |
           built=""
-          for pair in "PHP:$PHP_V" "Node.js:$NODE_V" "PostgreSQL:$PG_V" "MySQL:$MYSQL_V" "Redis:$REDIS_V"; do
-            if [ -n "${pair#*:}" ]; then built="${built:+$built, }${pair%%:*} ${pair#*:}"; fi
+          for r in ${SELECTED//,/ }; do
+            case "$r" in
+              php)      built+=", PHP ${{ inputs.php_version }}" ;;
+              node)     built+=", Node.js ${{ inputs.node_version }}" ;;
+              ollama)   built+=", Ollama ${{ inputs.ollama_version }}" ;;
+              postgres) built+=", PostgreSQL ${{ inputs.postgres_version }}" ;;
+              mysql)    built+=", MySQL ${{ inputs.mysql_version }}" ;;
+              redis)    built+=", Redis ${{ inputs.redis_version }}" ;;
+              nginx)    built+=", nginx ${{ inputs.nginx_version }}" ;;
+              httpd)    built+=", Apache httpd ${{ inputs.httpd_version }}" ;;
+            esac
           done
           gh release create "${{ inputs.release_tag }}" \
             --title "PortBay runtimes ${{ inputs.release_tag }}" \
-            --notes "PortBay managed runtimes: ${built}." \
+            --notes "PortBay managed runtimes built in this release: ${built#, }. The manifest also carries every entry of the previous one that was not rebuilt." \
             dist/*
