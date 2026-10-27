@@ -66,7 +66,7 @@ jobs:
       - name: Install build prerequisites
         run: |
           brew update
-          brew install autoconf automake bison re2c pkg-config zstd
+          brew install autoconf automake bison re2c pkg-config zstd fcgi
 
       # The host PHP only drives static-php-cli. A prebuilt one: `brew install
       # php` compiles from source whenever Homebrew bumps php before its bottle
@@ -105,6 +105,13 @@ jobs:
           tar -C "dist/php/${PHP_VERSION}" --zstd -cf "$archive" .
           shasum -a 256 "$archive" | awk '{print $1}' > "$archive.sha256"
           wc -c < "$archive" | tr -d ' ' > "$archive.size"
+
+      # Against the signed binaries that ship: a fresh Laravel app must install,
+      # boot and serve a request through php-fpm (via cgi-fcgi, no web server).
+      - name: Laravel smoke test
+        run: |
+          bash scripts/verify-php-runtime.sh "dist/php/${{ inputs.php_version }}"
+          bash scripts/smoke-laravel.sh "dist/php/${{ inputs.php_version }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
