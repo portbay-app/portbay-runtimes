@@ -1,0 +1,67 @@
+name: check-php-releases
+
+# Weekly: if php.net has a newer patch of a PHP line the merged release
+# manifests already ship, dispatch release-runtimes for it. Patch bumps only;
+# a minor line not in the manifests is never started automatically.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report what would be released without dispatching"
+        type: boolean
+        default: false
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare php.net with the shipped manifests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref_name }}
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: |
+          set -euo pipefail
+          # Every release's manifest merged, as publish sees it, so a partial
+          # latest manifest cannot hide a line that is still shipped.
+          node scripts/merge-manifest.mjs base --repo "$REPO" --out manifest.json
+          shipped="$(jq -r '.entries[] | select(.lang == "php") | .version' manifest.json | sort -uV)"
+          echo "manifest php versions: ${shipped//$'\n'/ }"
+
+          for line in 8.3 8.4 8.5; do
+            current="$(grep -E "^${line//./\\.}\.[0-9]+$" <<<"$shipped" | tail -n1 || true)"
+            if [ -z "$current" ]; then
+              echo "$line: not in the manifest, skipped"
+              continue
+            fi
+            latest="$(curl -fsSL "https://www.php.net/releases/index.php?json&version=$line" | jq -r .version)"
+            case "$latest" in
+              "$line".[0-9]*) ;;
+              *) echo "$line: php.net returned '$latest', expected $line.x" >&2; exit 1 ;;
+            esac
+            newest="$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n1)"
+            if [ "$newest" = "$current" ]; then
+              echo "$line: $current is current"
+              continue
+            fi
+            tag="php-$latest"
+            if gh release view "$tag" -R "$REPO" >/dev/null 2>&1; then
+              echo "$line: release $tag already exists, skipped"
+              continue
+            fi
+            echo "$line: $current -> $latest"
+            if [ "$DRY_RUN" = "true" ]; then
+              continue
+            fi
+            gh workflow run release-runtimes.yml -R "$REPO" --ref "$REF" \
+              -f runtimes=php -f php_version="$latest" -f release_tag="$tag"
+          done

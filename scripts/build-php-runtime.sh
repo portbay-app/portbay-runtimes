@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PHP_VERSION="${PHP_VERSION:-${1:-8.4.21}}"
+PHP_VERSION="${PHP_VERSION:-${1:-8.4.27}}"
 OUT_DIR="${OUT_DIR:-${2:-dist}}"
 ARCH="${ARCH:-$(uname -m)}"
 
@@ -19,7 +19,10 @@ WORK="$ROOT/.work/php-$PHP_VERSION-$MANIFEST_ARCH"
 SPC="$WORK/static-php-cli"
 BUILD="$WORK/buildroot"
 PKG="$OUT_DIR/php/$PHP_VERSION"
-EXTENSIONS="${PHP_EXTENSIONS:-bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib}"
+# mbregex is a separate static-php-cli extension: without it mbstring ships no
+# mb_split/mb_ereg*. readline gives `artisan tinker` line editing (CLI only).
+# redis is phpredis, Laravel's default Redis client; it uses session when present.
+EXTENSIONS="${PHP_EXTENSIONS:-bcmath,bz2,calendar,ctype,curl,dom,exif,fileinfo,filter,gd,iconv,intl,mbregex,mbstring,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,phar,posix,readline,redis,session,simplexml,soap,sockets,sodium,sqlite3,tokenizer,xml,xmlreader,xmlwriter,zip,zlib}"
 # GD links only the image codecs static-php-cli is told to build. Without
 # these it ships PNG/GIF only, and Laravel image libraries (Intervention,
 # spatie/image, medialibrary) fail on the first JPEG or WebP upload.
@@ -28,8 +31,15 @@ PHP_LIBS="${PHP_LIBS:-libjpeg,libwebp,freetype,libavif}"
 rm -rf "$WORK" "$PKG"
 mkdir -p "$WORK" "$PKG/bin" "$PKG/sbin" "$PKG/etc" "$PKG/lib" "$PKG/extensions" "$OUT_DIR"
 
-git clone --depth 1 https://github.com/crazywhalecc/static-php-cli.git "$SPC"
+# Pinned so a release is reproducible: the repo's default branch moves (it
+# became the v3 rewrite). This is the commit that built the 8.4.27 release.
+SPC_REF="${SPC_REF:-594e6439f4378ae02f3a70926e19d84992702535}"
+git init -q "$SPC"
 cd "$SPC"
+git remote add origin https://github.com/crazywhalecc/static-php-cli.git
+git fetch -q --depth 1 origin "$SPC_REF"
+git checkout -q FETCH_HEAD
+echo "static-php-cli $(git rev-parse HEAD)"
 composer install --no-dev --no-interaction --prefer-dist
 
 if ! command -v pkg-config >/dev/null 2>&1; then
@@ -75,8 +85,19 @@ opcache.enable = 1
 opcache.enable_cli = 1
 INI
 
+bash "$ROOT/scripts/verify-php-runtime.sh" "$PKG"
+
 "$PKG/bin/php" --version
 "$PKG/sbin/php-fpm" --version
+
+# The archive is named after the requested version, so a build that resolved to
+# any other patch would ship under the wrong name. Refuse rather than mislabel.
+got_cli="$("$PKG/bin/php" -r 'echo PHP_VERSION;')"
+got_fpm="$("$PKG/sbin/php-fpm" -v | head -1 | awk '{print $2}')"
+if [ "$got_cli" != "$PHP_VERSION" ] || [ "$got_fpm" != "$PHP_VERSION" ]; then
+  echo "built php $got_cli / php-fpm $got_fpm, expected $PHP_VERSION" >&2
+  exit 1
+fi
 
 # Fail the build rather than publish a GD that cannot read the formats above.
 "$PKG/bin/php" -r '
